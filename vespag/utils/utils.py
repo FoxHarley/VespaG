@@ -151,10 +151,10 @@ def read_gemme_table(txt_file: Path) -> np.ndarray:
     return df.to_numpy()
 
 
-raw_score_cdf = np.loadtxt("data/score_transformation/vespag_scores.csv", delimiter=",")
-sorted_gemme_scores = np.loadtxt(
-    "data/score_transformation/sorted_gemme_scores.csv", delimiter=","
-)
+# raw_score_cdf = np.loadtxt("data/score_transformation/vespag_scores.csv", delimiter=",")
+# sorted_gemme_scores = np.loadtxt(
+#     "data/score_transformation/sorted_gemme_scores.csv", delimiter=","
+# )
 
 
 def transform_score(score: float) -> float:

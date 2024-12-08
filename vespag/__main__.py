@@ -112,6 +112,7 @@ def predict(
         no_csv,
         h5_output,
         zero_based_mutations,
+        transform_scores,
         normalize_scores,
         embedding_type,
     )
