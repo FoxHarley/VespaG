@@ -12,10 +12,11 @@ Assessed on the [ProteinGym](https://proteingym.org) ([Notin et al. 2023](https:
 More details on **VespaG** can be found in the corresponding [preprint](https://doi.org/10.1101/2024.04.24.590982).
 
 ### Installation
-1. `conda env create -n vespag python==3.10 poetry==1.8.3` (exchange `conda` for `mamba`, `miniconda` or `micromamba` as you like)
+1. `conda env create -n vespag python==3.10` (exchange `conda` for `mamba`, `miniconda` or `micromamba` as you like)
 2. `conda activate vespag`
-3. `export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring`
-4. `poetry install`
+3. `conda install -c conda-forge poetry=1.8.3`
+4. `export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring`
+5. `poetry install`
 
 ### Quick Start: Running Inference with VespaG
 Run `python -m vespag predict` with the following options:  
@@ -30,8 +31,8 @@ Run `python -m vespag predict` with the following options:
 - `--no-csv`: Whether no CSV output should be produced.
 - `--h5-output`: Whether a file containing predictions in HDF5 format should be created.
 - `--zero-idx`: Whether to enumerate protein sequences (both in- and output) starting at 0.
-- `--transform`: Whether to transform predicted scores to the same distribution as GEMME substitution scores, which fall into a narrower range than VespaG scores, to ease comparability
-- `--normalize`: Whether to transform predicted scores to the [0, 1] interval by applying a sigmoid
+- `--transform/--dont-transform`: Whether to transform predicted scores to the same distribution as GEMME substitution scores, which fall into a narrower range than VespaG scores, to ease comparability
+- `--normalize/--dont-normalize`: Whether to transform predicted scores to the [0, 1] interval by applying a sigmoid
 
 ### Examples
 After installing the dependencies above and cloning the **VespaG** repo, you can try out the following examples:
