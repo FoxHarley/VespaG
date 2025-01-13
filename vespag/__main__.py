@@ -86,14 +86,14 @@ def predict(
             "--transform/--dont-transform",
             help="Whether to transform scores to same distribution as GEMME scores",
         ),
-    ] = True,
+    ] = False,
     normalize_scores: Annotated[
         bool,
         typer.Option(
             "--normalize/--dont-normalize",
             help="Whether to transform scores to [0, 1] range",
         ),
-    ] = True,
+    ] = False,
     embedding_type: Annotated[
         EmbeddingType,
         typer.Option(
