@@ -122,5 +122,6 @@ def compute_mutation_score(
 
     if normalize:
         score = normalize_score(score)
-
+        
     return score
+

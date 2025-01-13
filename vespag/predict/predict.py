@@ -3,6 +3,9 @@ import os
 import warnings
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+import numpy as np
+
 import h5py
 import numpy as np
 import rich.progress as progress
@@ -13,7 +16,9 @@ from tqdm.rich import tqdm
 from vespag.data.embeddings import Embedder
 from vespag.utils import (
     AMINO_ACIDS,
+    GEMME_ALPHABET,
     DEFAULT_MODEL_PARAMETERS,
+    Mutation,
     SAV,
     compute_mutation_score,
     get_device,
@@ -24,6 +29,15 @@ from vespag.utils import (
 )
 from vespag.utils.type_hinting import *
 
+def visualize_saliency_map(saliency_map, save_path,title="Saliency Map"):
+    plt.figure(figsize=(10, 4))
+    plt.imshow(saliency_map, cmap="hot", aspect="auto")
+    plt.colorbar(label="Gradient Magnitude")
+    plt.title(title)
+    plt.xlabel("Input Dimension")
+    plt.ylabel("Sample Index")
+    plt.savefig(save_path, bbox_inches="tight")
+    plt.close()
 
 def generate_predictions(
     fasta_file: Path,
@@ -116,58 +130,101 @@ def generate_predictions(
             "Generating predictions",
             total=sum([len(mutations) for mutations in mutations_per_protein.values()]),
         )
+
+        saliency_maps = {}
+
+        # get the predictions for each sequence in the fasta file
         for id, sequence in sequences.items():
             pbar.update(overall_progress, description=id)
-            embedding = embeddings[id].to(device)
-            y = model(embedding)
-            y = mask_non_mutations(y, sequence)
 
-            scores_per_protein[id] = {
-                mutation: compute_mutation_score(
-                    y,
-                    mutation,
-                    pbar=pbar,
-                    progress_id=overall_progress,
-                    transform=transform_scores,
-                    normalize=normalize_scores,
-                )
-                for mutation in mutations_per_protein[id]
-            }
-            if h5_output:
-                vespag_scores[id] = y.detach().numpy()
+            num_residues = len(sequence)
+            max_mutations = len(mutations_per_protein[id])
+            embedding_dim = embeddings[id].shape[1]
+            saliency_map_array = np.full((num_residues, max_mutations, embedding_dim), np.nan)
 
-        pbar.remove_task(overall_progress)
-    if h5_output:
-        h5_output_path = output_path / "vespag_scores_all.h5"
-        logger.info(f"Serializing predictions to {h5_output_path}")
-        with h5py.File(h5_output_path, "w") as f:
-            for id, vespag_prediction in tqdm(vespag_scores.items(), leave=False):
-                f.create_dataset(id, data=vespag_prediction)
+            with torch.enable_grad():
+                # Prepare the embeddings and enable gradients
+                embedding = embeddings[id].to(device)
+                embedding.requires_grad = True 
 
-    if not no_csv:
-        logger.info("Generating CSV output")
-        if not single_csv:
-            for protein_id, mutations in tqdm(scores_per_protein.items(), leave=False):
-                output_file = output_path / (protein_id + ".csv")
-                with output_file.open("w+") as f:
-                    f.write("Mutation,VespaG\n")
-                    f.writelines(
-                        [f"{str(sav)},{score}\n" for sav, score in mutations.items()]
-                    )
-        else:
-            output_file = output_path / "vespag_scores_all.csv"
-            with output_file.open("w+") as f:
-                f.write("Protein,Mutation,VespaG\n")
-                f.writelines(
-                    [
-                        line
-                        for line in tqdm(
-                            [
-                                f"{protein_id},{str(sav)},{score}\n"
-                                for protein_id, mutations in scores_per_protein.items()
-                                for sav, score in mutations.items()
-                            ],
-                            leave=False,
-                        )
-                    ]
-                )
+                # Forward pass
+                y = model(embedding)
+
+                # Compute saliency for a each mutation 
+                for mutation in mutations_per_protein[id]:
+                    print(mutation)
+                    if isinstance(mutation, Mutation):
+                        for sav in mutation:
+                            residue_index = sav.position
+                            mutation_index = GEMME_ALPHABET.index(sav.to_aa)
+                    elif isinstance(mutation, SAV):
+                        residue_index = mutation.position
+                        mutation_index = GEMME_ALPHABET.index(mutation.to_aa)
+
+                    target_output = y[residue_index, mutation_index]
+                    target_output.backward(retain_graph=True)  # Compute gradients w.r.t. input
+
+                    saliency_map = torch.abs(embedding.grad).cpu().numpy()
+                    saliency_map_array[residue_index, mutation_index, :] = saliency_map[residue_index, :]
+
+                    # visualize_saliency_map(saliency_map, "saliency_map.png", title="Saliency Map")
+
+                    # Clear gradients for the next iteration
+                    embedding.grad.zero_()
+
+            saliency_maps[id] = saliency_map_array
+            print(saliency_maps[id])
+            # y = mask_non_mutations(y, sequence)
+
+            # scores_per_protein[id] = {
+            #     mutation: compute_mutation_score(
+            #         y,
+            #         mutation,
+            #         pbar=pbar,
+            #         progress_id=overall_progress,
+            #         transform=transform_scores,
+            #         normalize=normalize_scores,
+            #     )
+            #     for mutation in mutations_per_protein[id]
+            # }
+
+            # print(scores_per_protein[id])
+
+        #     if h5_output:
+        #         vespag_scores[id] = y.detach().numpy()
+
+        # pbar.remove_task(overall_progress)
+    # if h5_output:
+    #     h5_output_path = output_path / "vespag_scores_all.h5"
+    #     logger.info(f"Serializing predictions to {h5_output_path}")
+    #     with h5py.File(h5_output_path, "w") as f:
+    #         for id, vespag_prediction in tqdm(vespag_scores.items(), leave=False):
+    #             f.create_dataset(id, data=vespag_prediction)
+
+    # if not no_csv:
+    #     logger.info("Generating CSV output")
+    #     if not single_csv:
+    #         for protein_id, mutations in tqdm(scores_per_protein.items(), leave=False):
+    #             output_file = output_path / (protein_id + ".csv")
+    #             with output_file.open("w+") as f:
+    #                 f.write("Mutation,VespaG\n")
+    #                 f.writelines(
+    #                     [f"{str(sav)},{score}\n" for sav, score in mutations.items()]
+    #                 )
+    #     else:
+    #         output_file = output_path / "vespag_scores_all.csv"
+    #         with output_file.open("w+") as f:
+    #             f.write("Protein,Mutation,VespaG\n")
+    #             f.writelines(
+    #                 [
+    #                     line
+    #                     for line in tqdm(
+    #                         [
+    #                             f"{protein_id},{str(sav)},{score}\n"
+    #                             for protein_id, mutations in scores_per_protein.items()
+    #                             for sav, score in mutations.items()
+    #                         ],
+    #                         leave=False,
+    #                     )
+    #                 ]
+    #             )
