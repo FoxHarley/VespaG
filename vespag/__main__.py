@@ -5,7 +5,7 @@ import typer
 
 from .data.embeddings import generate_embeddings
 from .eval import eval
-from .predict import generate_predictions
+from .predict import generate_predictions, generate_saliency_maps
 from .training.train import train as run_training
 from .utils.type_hinting import EmbeddingType
 
@@ -117,6 +117,71 @@ def predict(
         embedding_type,
     )
 
+@app.command()
+def saliency(
+    fasta_file: Annotated[
+        Path,
+        typer.Option(
+            "-i",
+            "--input",
+            help="Path to FASTA-formatted file containing protein sequence(s)",
+        ),
+    ],
+    output_path: Annotated[
+        Path,
+        typer.Option(
+            "-o",
+            "--output",
+            help="Path for saving generated saliency maps. Defaults to ./output",
+        ),
+    ] = None,
+    embedding_file: Annotated[
+        Path,
+        typer.Option(
+            "-e",
+            "--embeddings",
+            help="Path to pre-generated input embeddings. Embeddings will be generated from scratch if no path is provided.",
+        ),
+    ] = None,
+    mutation_file: Annotated[
+        Path,
+        typer.Option(
+            "--mutation-file", help="CSV file specifying specific mutations to score"
+        ),
+    ] = None,
+    id_map_file: Annotated[
+        Path,
+        typer.Option(
+            "--id-map",
+            help="CSV file mapping embedding IDs to FASTA IDs if they're different",
+        ),
+    ] = None,
+    zero_based_mutations: Annotated[
+        bool,
+        typer.Option(
+            "--zero-idx/--one-idx",
+            help="Whether to enumerate the sequence starting at 0",
+        ),
+    ] = False,
+    embedding_type: Annotated[
+        EmbeddingType,
+        typer.Option(
+            "--embedding-type", help="Type of pLM used for generating embeddings"
+        ),
+    ] = "esm2",
+) -> None:
+    """
+    Generate saliency maps for mutational landscapes from input protein sequences.
+    """
+    generate_saliency_maps(
+        fasta_file=fasta_file,
+        output_path=output_path,
+        embedding_file=embedding_file,
+        mutation_file=mutation_file,
+        id_map_file=id_map_file,
+        zero_based_mutations=zero_based_mutations,
+        embedding_type=embedding_type,
+    )
 
 @app.command()
 def embed(
