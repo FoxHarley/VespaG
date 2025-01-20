@@ -13,6 +13,7 @@
 /output/
 /plots/
 /workflows/
+/output*
 
 # Large data
 # The default needs to ignore all files with an extension instead of folders as it is not possible to re-include a file if a parent directory of that file is excluded.

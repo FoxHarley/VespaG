@@ -3,7 +3,7 @@ import os
 import warnings
 from pathlib import Path
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 
 import h5py
@@ -29,15 +29,15 @@ from vespag.utils import (
 )
 from vespag.utils.type_hinting import *
 
-def visualize_saliency_map(saliency_map, save_path,title="Saliency Map"):
-    plt.figure(figsize=(10, 4))
-    plt.imshow(saliency_map, cmap="hot", aspect="auto")
-    plt.colorbar(label="Gradient Magnitude")
-    plt.title(title)
-    plt.xlabel("Input Dimension")
-    plt.ylabel("Sample Index")
-    plt.savefig(save_path, bbox_inches="tight")
-    plt.close()
+# def visualize_saliency_map(saliency_map, save_path,title="Saliency Map"):
+#     plt.figure(figsize=(10, 4))
+#     plt.imshow(saliency_map, cmap="hot", aspect="auto")
+#     plt.colorbar(label="Gradient Magnitude")
+#     plt.title(title)
+#     plt.xlabel("Input Dimension")
+#     plt.ylabel("Sample Index")
+#     plt.savefig(save_path, bbox_inches="tight")
+#     plt.close()
 
 def generate_saliency_maps(
     fasta_file: Path,
@@ -127,14 +127,12 @@ def generate_saliency_maps(
             total=sum([len(mutations) for mutations in mutations_per_protein.values()]),
         )
 
-        saliency_maps = {}
-
         # get the predictions for each sequence in the fasta file
         for id, sequence in sequences.items():
-            pbar.update(overall_progress, description=id)
+            pbar.update(overall_progress, description=id, advance=1)
 
             num_residues = len(sequence)
-            max_mutations = len(mutations_per_protein[id])
+            max_mutations = 20
             embedding_dim = embeddings[id].shape[1]
             saliency_map_array = np.zeros((num_residues, max_mutations, embedding_dim))
 
@@ -156,34 +154,24 @@ def generate_saliency_maps(
                     residue_index = mutation.position
                     mutation_index = GEMME_ALPHABET.index(mutation.to_aa)
 
-                    if residue_index == mutation_index:
-                        continue
-
                     target_output = y[residue_index, mutation_index]
                     # Compute gradients w.r.t. one mutation
                     target_output.backward(retain_graph=True) 
 
-                    # From the saliency maps, select just the gradients for the residue in question
+                    # From the embeddings, select just the gradients for the residue in question
                     # Because the other embeddings are all zero due to the nature of network architecture, which only considers one residue at a time for the predictions
+                    # Absolute value gives us the saliency (magnitude of influence rather than direction)
                     saliency_map = torch.abs(embedding.grad).cpu().numpy()
                     saliency_map_array[residue_index, mutation_index, :] = saliency_map[residue_index, :]
 
                     # Clear gradients for the next iteration
                     embedding.grad.zero_()
 
-            saliency_maps[id] = saliency_map_array
+            # store the results in the output folder as .npy files
+            output_file = output_path / (id + "_saliency.npy")
+            np.save(output_file, saliency_map_array)
 
         pbar.remove_task(overall_progress)
-
-        if not output_path.exists():
-            logger.info(f"Creating output directory: {output_path}")
-            output_path.mkdir(parents=True)
-
-        logger.info("Saving Saliency Maps")
-        # store the results in the output folder as .npy files
-        for protein_id, saliency_map in saliency_maps.items():
-            output_file = output_path / (protein_id + "_saliency.npy")
-            np.save(output_file, saliency_map)
 
 def generate_predictions(
     fasta_file: Path,

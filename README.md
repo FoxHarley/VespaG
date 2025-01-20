@@ -12,7 +12,7 @@ Assessed on the [ProteinGym](https://proteingym.org) ([Notin et al. 2023](https:
 More details on **VespaG** can be found in the corresponding [preprint](https://doi.org/10.1101/2024.04.24.590982).
 
 ### Installation
-1. `conda env create -n vespag python==3.10` (exchange `conda` for `mamba`, `miniconda` or `micromamba` as you like)
+1. `conda create -n vespag python==3.10` (exchange `conda` for `mamba`, `miniconda` or `micromamba` as you like)
 2. `conda activate vespag`
 3. `conda install -c conda-forge poetry=1.8.3`
 4. `export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring`
@@ -40,6 +40,8 @@ After installing the dependencies above and cloning the **VespaG** repo, you can
     - `python -m vespag predict -i data/example/example.fasta`. This will save a CSV file for each sequence in the folder `./output`
 - Run VespaG with precomputed embeddings for the example fasta file with 3 sequences in `data/example/example.fasta`: 
     - `python -m vespag predict -i data/example/example.fasta -e output/esm2_embeddings.h5 --single-csv`. This will save a single CSV file for all sequences in the folder `./output`
+- Run VespaG without precomputed embeddings for the example fasta file to just generate the saliency maps: 
+	- `python -m vespag saliency -i data/example/example.fasta`
 
 ### Re-training VespaG
 VespaG uses [DVC](https://dvc.org/) for pipeline orchestration and [WandB](https://wandb.ai/) for experiment tracking. 
