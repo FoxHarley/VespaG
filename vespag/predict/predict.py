@@ -2,6 +2,7 @@ import csv
 import os
 import warnings
 from pathlib import Path
+from torch import nn
 
 # import matplotlib.pyplot as plt
 import numpy as np
@@ -121,7 +122,7 @@ def generate_saliency_maps(
         progress.TaskProgressColumn(),
         progress.TimeElapsedColumn(),
         progress.TextColumn("Current protein: {task.description}"),
-    ) as pbar, torch.no_grad():
+    ) as pbar:
         overall_progress = pbar.add_task(
             "Generating Saliency Maps",
             total=sum([len(mutations) for mutations in mutations_per_protein.values()]),
@@ -154,14 +155,14 @@ def generate_saliency_maps(
                     residue_index = mutation.position
                     mutation_index = GEMME_ALPHABET.index(mutation.to_aa)
 
-                    target_output = y[residue_index, mutation_index]
                     # Compute gradients w.r.t. one mutation
+                    target_output = y[residue_index, mutation_index]
                     target_output.backward(retain_graph=True) 
 
                     # From the embeddings, select just the gradients for the residue in question
                     # Because the other embeddings are all zero due to the nature of network architecture, which only considers one residue at a time for the predictions
                     # Absolute value gives us the saliency (magnitude of influence rather than direction)
-                    saliency_map = torch.abs(embedding.grad).cpu().numpy()
+                    saliency_map = embedding.grad.cpu().numpy()
                     saliency_map_array[residue_index, mutation_index, :] = saliency_map[residue_index, :]
 
                     # Clear gradients for the next iteration
@@ -169,6 +170,189 @@ def generate_saliency_maps(
 
             # store the results in the output folder as .npy files
             output_file = output_path / (id + "_saliency.npy")
+            np.save(output_file, saliency_map_array)
+
+        pbar.remove_task(overall_progress)
+
+class Guided_backprop():
+    """ Source: https://leslietj.github.io/2020/07/22/Deep-Learning-Guided-BackPropagation/ """
+    def __init__(self, model):
+        self.model = model
+        self.input_reconstruction = None # store R0
+        self.activation_maps = []  # Store activation maps f1, f2, ... 
+        self.model.eval()
+        self.register_hooks()
+
+    def register_hooks(self):
+        def first_layer_hook_fn(module, grad_in, grad_out):
+            self.input_reconstruction = grad_in[0] 
+
+        def forward_hook_fn(module, input, output):
+            self.activation_maps.append(output)
+
+        def backward_hook_fn(module, grad_in, grad_out):
+            grad = self.activation_maps[-1]
+            # for the forward pass, after the ReLU operation, 
+            # if the output value is positive, we set the value to 1,
+            # and if the output value is negative, we set it to 0.
+            # grad[grad > 0] = 1 
+            grad = torch.where(grad > 0, torch.ones_like(grad), torch.zeros_like(grad))  # Out-of-place operation
+            
+            # grad_out[0] stores the gradients for each feature map,
+            # and we only retain the positive gradients
+            positive_grad_out = torch.clamp(grad_out[0], min=0.0)
+            new_grad_in = positive_grad_out * grad
+
+            return (new_grad_in,)
+
+        # travese the modules，register forward hook & backward hook
+        # for the ReLU
+        for name, module in self.model.named_modules():
+            if isinstance(module, nn.LeakyReLU):
+                module.register_forward_hook(forward_hook_fn)
+                module.register_backward_hook(backward_hook_fn)
+
+        # register backward hook for the first conv layer
+        first_layer = next(iter(self.model.children()))
+        first_layer.register_backward_hook(first_layer_hook_fn)
+
+def generate_guided_saliency_maps(
+    fasta_file: Path,
+    output_path: Path,
+    embedding_file: Path = None,
+    mutation_file: Path = None,
+    id_map_file: Path = None,
+    zero_based_mutations: bool = False,
+    embedding_type: EmbeddingType = "esm2"        
+) -> None:
+    """ Use guided backpropagation to generate saliency maps 
+    
+    Source idea: Springenberg et al. (2015) Striving for Simplicity: The All Convolutional Net (http://arxiv.org/abs/1412.6806)
+    Source for code adaptions: https://leslietj.github.io/2020/07/22/Deep-Learning-Guided-BackPropagation/
+    """
+    logger = setup_logger()
+    warnings.filterwarnings("ignore", message="rich is experimental/alpha")
+
+    output_path = output_path or Path.cwd() / "output"
+    if not output_path.exists():
+        logger.info(f"Creating output directory {output_path}")
+        output_path.mkdir(parents=True)
+
+    device = get_device()
+    params = DEFAULT_MODEL_PARAMETERS
+    params["embedding_type"] = embedding_type
+    model = load_model(**params).eval().to(device, dtype=torch.float)
+    guided_bp = Guided_backprop(model)
+
+    sequences = {rec.id: str(rec.seq) for rec in SeqIO.parse(fasta_file, "fasta")}
+
+    # Load or generate embeddings
+    if embedding_file:
+        logger.info(f"Loading pre-computed embeddings from {embedding_file}")
+        embeddings = {
+            id: torch.from_numpy(np.array(emb[()], dtype=np.float32))
+            for id, emb in tqdm(
+                h5py.File(embedding_file).items(),
+                desc="Loading embeddings",
+                leave=False,
+            )
+        }
+        if id_map_file:
+            id_map = {row[0]: row[1] for row in csv.reader(id_map_file.open("r"))}
+            for from_id, to_id in id_map.items():
+                embeddings[to_id] = embeddings[from_id]
+                del embeddings[from_id]
+
+    else:
+        logger.info("Generating ESM2 embeddings")
+        if "HF_HOME" in os.environ:
+            plm_cache_dir = os.environ["HF_HOME"]
+        else:
+            plm_cache_dir = Path.cwd() / ".esm2_cache"
+            plm_cache_dir.mkdir(exist_ok=True)
+        embedder = Embedder("facebook/esm2_t36_3B_UR50D", plm_cache_dir)
+        embeddings = embedder.embed(sequences)
+        embedding_output_path = output_path / "esm2_embeddings.h5"
+        logger.info(
+            f"Saving generated ESM2 embeddings to {embedding_output_path} for re-use"
+        )
+        Embedder.save_embeddings(embeddings, embedding_output_path)
+
+    # Load or generate mutational landscape
+    if mutation_file:
+        logger.info("Parsing mutational landscape")
+        mutations_per_protein = read_mutation_file(
+            mutation_file, one_indexed=not zero_based_mutations
+        )
+    else:
+        logger.info("Generating mutational landscape")
+        mutations_per_protein = {
+            protein_id: [
+                SAV(i, wildtype_aa, other_aa, not zero_based_mutations)
+                for i, wildtype_aa in enumerate(sequence)
+                for other_aa in AMINO_ACIDS
+                if other_aa != wildtype_aa
+            ]
+            for protein_id, sequence in tqdm(sequences.items(), leave=False)
+        }
+
+    logger.info("Generating Guided Backpropagation Saliency Maps")
+
+    with progress.Progress(
+        progress.TextColumn("[progress.description]Generating Saliency Maps"),
+        progress.BarColumn(),
+        progress.TaskProgressColumn(),
+        progress.TimeElapsedColumn(),
+        progress.TextColumn("Current protein: {task.description}"),
+    ) as pbar:
+        overall_progress = pbar.add_task(
+            "Generating Saliency Maps",
+            total=sum([len(mutations) for mutations in mutations_per_protein.values()]),
+        )
+
+        # get the predictions for each sequence in the fasta file
+        for id, sequence in sequences.items():
+            pbar.update(overall_progress, description=id, advance=1)
+
+            num_residues = len(sequence)
+            max_mutations = 20
+            embedding_dim = embeddings[id].shape[1]
+            saliency_map_array = np.zeros((num_residues, max_mutations, embedding_dim))
+
+            with torch.enable_grad():
+                # Prepare the embeddings and enable gradients
+                embedding = embeddings[id].to(device)
+                embedding.requires_grad = True 
+                
+                # Forward pass
+                y = guided_bp.model(embedding)
+                guided_bp.model.zero_grad()
+
+                # Compute saliency for a each mutation 
+                for mutation in mutations_per_protein[id]:
+                    # guided_bp.model.zero_grad()
+
+                    if isinstance(mutation, Mutation):
+                        raise NotImplementedError("Saliency map is only supported for the entire mutational landscape")
+                    elif not isinstance(mutation, SAV):
+                        raise ValueError(f"Invalid mutation type: {type(mutation)}. Expected SAV")
+                    
+                    residue_index = mutation.position
+                    mutation_index = GEMME_ALPHABET.index(mutation.to_aa)
+
+                    # Compute gradients w.r.t. one mutation
+                    target_output = y[residue_index, mutation_index]
+                    target_output.backward(retain_graph=True) 
+
+                    # Compute and store Guided Backpropagation saliency
+                    saliency_map = embedding.grad.cpu().numpy()
+                    saliency_map_array[residue_index, mutation_index, :] = saliency_map[residue_index, :]
+
+                    # Clear gradients for the next iteration
+                    embedding.grad.zero_()
+
+            # store the results in the output folder as .npy files
+            output_file = output_path / (id + "_guided_saliency.npy")
             np.save(output_file, saliency_map_array)
 
         pbar.remove_task(overall_progress)
