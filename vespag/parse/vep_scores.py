@@ -5,6 +5,26 @@ import pandas as pd
 from tqdm import tqdm
 from Bio import AlignIO
 
+def load_fasta_file(path):
+    """Load a FASTA file."""
+    with open(path, 'r') as file:
+        lines = file.readlines()
+        sequences = []
+        for i in range(0, len(lines), 2):
+            sequences.append((lines[i].strip()[1:], lines[i + 1].strip()))
+    return pd.DataFrame(sequences, columns=["id", "sequence"])
+
+def load_dms_scores_from_folder(path):
+    """Load all DMS scores from CSV files in the specified folder."""
+    dms_scores_list = []
+    # load the files
+    for file in tqdm(glob.glob(f"{path}/*.csv"), unit="file", desc="Loading DMS scores"):
+        id = os.path.basename(file).split(".")[0]
+        df = pd.read_csv(file)
+        df['id'] = id
+        dms_scores_list.append(df)
+    return pd.concat(dms_scores_list, ignore_index=True)
+
 def get_vespag_scores(path):
     """Get the VespaG scores for each residue and mutation from a CSV file."""
     df = pd.read_csv(path)

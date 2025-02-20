@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
 
-from src.constants import OPTIONS, GEMME_ALPHABET
+from src.constants import OPTIONS, SIMPLE_OPTIONS, GEMME_ALPHABET
 
 def plot_mutation_saliency_over_sequence(saliency_df, sequence):
     """ Plots the average mutation effect and saliency for each residue in the sequence """
@@ -162,29 +162,45 @@ def plot_mean_saliency_for_sequence(saliency_map, title):
     plt.title(title)
     plt.show()
 
-def plot_mutation_effect_for_residue(saliency_df, residue_index_one_index, title="Mutation Effect for Residue", color_by=None):
+def plot_mean_saliency_for_dataset(saliency_scores: dict, title):
+    """ Plots the mean and the sem of the saliencies for multiple sequences for each embedding dimension """
+    # check assumptions
+    assert saliency_map.shape[1] == 20 and saliency_map.shape[2] == 2560
+
+    # calculate mean saliency for each embedding dimension
+    mean_saliency_per_dim = np.mean(saliency_map, axis=(0, 1))
+    assert mean_saliency_per_dim.shape == (2560,)
+    # calculate the standard error of the mean for each embedding dimension
+    sem_saliency_per_dim = np.std(saliency_map, axis=(0, 1)) / np.sqrt(saliency_map.shape[0] * saliency_map.shape[1])
+
+    # plot the mean saliency for each embedding dimension
+    plt.figure(figsize=(12, 6))
+    plt.plot(mean_saliency_per_dim, label="Mean")
+    plt.fill_between(
+        np.arange(len(mean_saliency_per_dim)),
+        mean_saliency_per_dim - 1.96 * sem_saliency_per_dim,
+        mean_saliency_per_dim + 1.96 * sem_saliency_per_dim,
+        color="blue",
+        alpha=0.2,
+        label="±1.96 SE"
+    )
+
+
+    plt.xlabel("Embedding Dimension (2560)")
+    plt.ylabel("Mean Saliency")
+    plt.legend()
+    plt.title(title)
+    plt.show()
+
+def plot_mutation_effect_for_residue(saliency_df, residue_index_one_index, complexity: str, title="Mutation Effect for Residue", color_by=None):
     """ Plots the mutation effect against the mutant for a specific reisude. 
     
     Allows colloration of the scatter plot by saliency scores or amino acid properties.
-    Options for color_by: None,
-                            'saliency',
-                            'mutant_hydropathy_classes',
-                            'mutant_volume_classes',
-                            'mutant_chemical_classes',
-                            'mutant_physicochemical_classes',
-                            'mutant_charge_classes',
-                            'mutant_polarity_classes',
-                            'mutant_hydrogen_donor_acceptor_classes',
-                            'change_hydropathy_classes',
-                            'change_volume_classes',
-                            'change_chemical_classes',
-                            'change_physicochemical_classes',
-                            'change_charge_classes',
-                            'change_polarity_classes',
-                            'change_hydrogen_donor_acceptor_classes'    
+    Options for color_by: None, 'saliency', OPTIONS, SIMPLE_OPTIONS
     """
     # check assumptions
     assert isinstance(saliency_df, pd.DataFrame)
+    assert complexity in ['simple', 'complex']
 
     # filter the dataframe for the specific residue
     residue_df = saliency_df[saliency_df["residue_index"] == residue_index_one_index].copy()
@@ -193,7 +209,10 @@ def plot_mutation_effect_for_residue(saliency_df, residue_index_one_index, title
     residue_df['normalized_mutation_effect'] = (residue_df['mutation_effect'] - np.min(residue_df['mutation_effect'])) / (np.max(residue_df['mutation_effect']) - np.min(residue_df['mutation_effect']))
 
     # define hue according to color by object 
-    options = [f'mutant_{option}' for option in OPTIONS] + [f'wildtype_{option}' for option in OPTIONS] + [f'change_{option}' for option in OPTIONS]
+    if complexity == 'simple':
+        options = SIMPLE_OPTIONS
+    else:
+        options = [f'mutant_{option}' for option in OPTIONS] + [f'wildtype_{option}' for option in OPTIONS] + [f'change_{option}' for option in OPTIONS]
     if not color_by:
         hue = None
         palette = None
@@ -223,24 +242,7 @@ def plot_interactive_mutant_effect_vs_saliency(saliency_df, title="Mutation Effe
     """ Generates an interactive scatter plot with the mutation effect vs. the average saliency, colored by selection. 
         Hovering over a data point shows additional details.
     
-    Options for color_by: 
-        None,
-        'wildtype',
-        'mutant', 
-        'mutant_hydropathy_classes',
-        'mutant_volume_classes',
-        'mutant_chemical_classes',
-        'mutant_physicochemical_classes',
-        'mutant_charge_classes',
-        'mutant_polarity_classes',
-        'mutant_hydrogen_donor_acceptor_classes',
-        'change_hydropathy_classes',
-        'change_volume_classes',
-        'change_chemical_classes',
-        'change_physicochemical_classes',
-        'change_charge_classes',
-        'change_polarity_classes',
-        'change_hydrogen_donor_acceptor_classes'
+    Options for color_by: None, 'wildtype', 'mutant', OPTIONS, SIMPLE_OPTIONS
     """
     width = 600
     height = 600
@@ -275,35 +277,36 @@ def plot_interactive_mutant_effect_vs_saliency(saliency_df, title="Mutation Effe
         height=height,
         xaxis_title="Average Saliency",
         yaxis_title="Mutation Effect",
-        xaxis=dict(range=[0,1], fixedrange=True),
-        yaxis=dict(range=[0,1], fixedrange=True),
+        xaxis=dict(range=[0,1], fixedrange=True, scaleanchor="y"),
+        yaxis=dict(range=[0,1], fixedrange=True, scaleanchor="x"),
         template="plotly_white",
-        margin=dict(l=50, r=50, t=50, b=50)  # Reduce right margin slightly
+        margin=dict(l=50, r=50, t=50, b=50)  
     )
 
     # Move legend outside and resize it
     if color_by:
         fig.update_layout(
             legend=dict(
-                title=colorbar_title,  # Fix title
-                x=1.05,  # Move legend outside plot
-                y=1,  # Align legend at the top
-                orientation="v"  # Ensure vertical alignment
+                title=colorbar_title,
+                x=1.05, 
+                y=1, 
+                orientation="v" 
             ),
             coloraxis_colorbar=dict(
-                title=colorbar_title,  # Colorbar title
-                thickness=15,  # Slim colorbar
-                len=0.6,  # Make colorbar shorter
-                xpad=20  # Add spacing between plot and legend
+                title=colorbar_title,  
+                thickness=15, 
+                len=0.6,
+                xpad=20  
             )
         )
 
     fig.show()
 
-def plot_parallel_coordinates(saliency_df, columns_to_use, title="Parallel Coordinates Plot"):
+def plot_parallel_coordinates(saliency_df, columns_to_use, complexity: str, title="Parallel Coordinates Plot"):
     """ Plots a parallel coordinates plot for the saliency dataframe """
     # check assumptions
     assert isinstance(saliency_df, pd.DataFrame)
+    assert complexity in ['simple', 'complex']
 
     plotting_df = saliency_df.copy()
 
@@ -315,7 +318,10 @@ def plot_parallel_coordinates(saliency_df, columns_to_use, title="Parallel Coord
     label_mapping = {}  
     factorized_columns = []  # Store only transformed columns
 
-    options = [f'mutant_{option}' for option in OPTIONS] + [f'wildtype_{option}' for option in OPTIONS] + [f'change_{option}' for option in OPTIONS] + ['mutant', 'wildtype']
+    if complexity == 'simple':
+        options = SIMPLE_OPTIONS + ['mutant', 'wildtype']  
+    else:
+        options = [f'mutant_{option}' for option in OPTIONS] + [f'wildtype_{option}' for option in OPTIONS] + [f'change_{option}' for option in OPTIONS] + ['mutant', 'wildtype']
     for column in columns_to_use:
         if column in options:  # Factorize only categorical columns
             plotting_df[column + '_factorized'], unique_labels = pd.factorize(plotting_df[column], sort=True)

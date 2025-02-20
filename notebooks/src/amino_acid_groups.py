@@ -155,3 +155,51 @@ AA_GROUPS = {
         "V": "none",
     }
 }
+
+# https://www.researchgate.net/figure/The-most-common-twenty-amino-acids-found-in-eukaryotes-The-amino-acids-are-grouped_fig3_350053992
+BIOCHEMICAL_CLASSIFICATION = {
+    "R": "positive_charged", 
+    "H": "positive_charged",
+    "K": "positive_charged",  
+    "D": "negative_charged",  
+    "E": "negative_charged",  
+    "S": "polar_uncharged",  
+    "T": "polar_uncharged",  
+    "N": "polar_uncharged",   
+    "Q": "polar_uncharged",   
+    "C": "cysteine",      
+    "G": "glycine",      
+    "P": "proline",      
+    "A": "hydrophobic",       
+    "V": "hydrophobic",      
+    "I": "hydrophobic",       
+    "L": "hydrophobic",       
+    "M": "hydrophobic",      
+    "F": "hydrophobic",       
+    "Y": "hydrophobic",      
+    "W": "hydrophobic"
+}
+
+# https://link.springer.com/chapter/10.1007/978-3-030-47645-8_3
+CHARGE_POLARITY_CLASSIFICATION = {
+    "G": "non_polar",
+    "A": "non_polar",
+    "V": "non_polar",
+    "C": "non_polar",
+    "P": "non_polar",
+    "L": "non_polar",
+    "I": "non_polar",
+    "M": "non_polar",
+    "W": "non_polar",
+    "F": "non_polar",
+    "K": "positive_charged",
+    "R": "positive_charged",
+    "H": "positive_charged",
+    "D": "negative_charged",
+    "E": "negative_charged",
+    "S": "polar",
+    "T": "polar",
+    "Y": "polar",
+    "N": "polar",
+    "Q": "polar"
+}
