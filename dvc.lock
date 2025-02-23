@@ -1,0 +1,4 @@
+schema: '2.0'
+stages:
+  preprocess-gemme-annotations@human5k_256:
+    cmd: python -m vespag.data.gemme load data/retrain_vespag/gemme_seq_human5k data/retrain_vespag/gemme_seq_human5k_predictions.h5

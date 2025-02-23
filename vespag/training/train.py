@@ -55,7 +55,7 @@ def train(
     train_datasets = {
         dataset: PerResidueDataset(
             dataset_parameters["train"][dataset]["embeddings"][embedding_type],
-            dataset_parameters["train"][dataset]["gemme"],
+            dataset_parameters["train"][dataset]["gemme"]['processed'],
             (
                 dataset_parameters["train"][dataset]["splits"]["train"]
                 if not use_full_dataset
@@ -109,7 +109,7 @@ def train(
         val_datasets = {
             dataset: PerResidueDataset(
                 dataset_parameters["train"][dataset]["embeddings"][embedding_type],
-                dataset_parameters["train"][dataset]["gemme"],
+                dataset_parameters["train"][dataset]["gemme"]['processed'],
                 dataset_parameters["train"][dataset]["splits"]["val"],
                 precision,
                 device,

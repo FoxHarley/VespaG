@@ -57,7 +57,7 @@ stages:
       - vespag/training/dataset.py
       - vespag/training/trainer.py
       - vespag/models
-      - data/train/${item.dataset}/gemme_predictions.h5
+      - data/retrain_vespag/gemme_seq_human5k_predictions.h5
     params:
       - datasets
       - random

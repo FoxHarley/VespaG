@@ -18,11 +18,13 @@
 
 # Large data
 # The default needs to ignore all files with an extension instead of folders as it is not possible to re-include a file if a parent directory of that file is excluded.
-data/**/*.*
-!data/example
-!data/train/*.fasta
-!data/test/*.csv
-!data/test/*.fasta
+data/
+wandb/
+# !data/example
+# !data/train/*.fasta
+# !data/test/*.csv
+# !data/test/*.fasta
+# data/retrain_vespag
 
 # Python artifacts
 src/vespag/**/__pycache__

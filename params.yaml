@@ -11,6 +11,16 @@ datasets:
       splits:
         train: data/train/human/splits/train_full.csv
         val: data/train/human/splits/val_full.csv
+    human5k_256:
+      fasta: data/retrain_vespag/seq_human5k.fasta
+      embeddings:
+        esm2: data/retrain_vespag/embeddings/seq_human_5k_esm2_embeddings_q=90_n_dimensions=256.h5
+      gemme: 
+        raw: data/retrain_vespag/gemme_seq_human5k
+        processed: data/retrain_vespag/gemme_seq_human5k_predictions.h5
+      splits:
+        train: data/retrain_vespag/seq_human5k_train.csv
+        val: data/retrain_vespag/seq_human5k_validation.csv
     droso4k:
       fasta: data/train/droso/sequences.fasta
       embeddings:
@@ -152,5 +162,5 @@ models:
       checkpoint_every_epoch: ~
 
 wandb:
-  username: <username>
-  project: <project>
+  username: nicole_thesis
+  project: retrain_vespag

@@ -87,7 +87,7 @@ def get_embedding_dim(embedding_type: EmbeddingType) -> int:
     if embedding_type == "prott5":
         return 1024
     elif embedding_type == "esm2":
-        return 2560
+        return 256 # TODO quick and dirty hack for custom embeddings
 
 
 def get_device() -> torch.device:
